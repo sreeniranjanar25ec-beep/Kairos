@@ -1,0 +1,180 @@
+clc;
+clear;
+close all;
+
+% KAIROS - ECW26012
+% Battery Charging Profile Optimization
+% Illustrative simulation only - not real battery measurements
+
+%% Battery Parameters
+capacity_Ah = 2;
+initial_SOC = 20;
+target_SOC = 90;
+ambient_temp = 25;
+max_temp = 40;
+max_current = 1;
+dt = 1;                       % Time step in minutes
+
+time = 0:dt:240;
+n = length(time);
+
+% Three charging strategies
+strategies = {'Constant Current', ...
+               'Tapered Charging', ...
+               'Temperature-Aware Charging'};
+
+SOC_all = zeros(3,n);
+Current_all = zeros(3,n);
+Temp_all = zeros(3,n);
+charge_time = zeros(1,3);
+
+%% Simulate Each Charging Strategy
+for strategy = 1:3
+
+    SOC = zeros(1,n);
+    Current = zeros(1,n);
+    Temp = zeros(1,n);
+
+    SOC(1) = initial_SOC;
+    Temp(1) = ambient_temp;
+
+    for k = 2:n
+
+        % Select charging current
+        switch strategy
+
+            case 1
+                % Constant-current charging
+                I = max_current;
+
+            case 2
+                % Tapered charging near target SOC
+                if SOC(k-1) < 70
+                    I = max_current;
+                else
+                    I = max_current * ...
+                        (target_SOC - SOC(k-1)) / ...
+                        (target_SOC - 70);
+                end
+
+            case 3
+                % Temperature-aware charging
+                if Temp(k-1) < 30
+                    I = max_current;
+                else
+                    I = max_current * ...
+                        max(0.2, (max_temp - Temp(k-1)) / ...
+                        (max_temp - 30));
+                end
+
+        end
+
+        % Prevent negative current
+        I = max(0,I);
+
+        % Stop charging at target SOC
+        if SOC(k-1) >= target_SOC
+            I = 0;
+        end
+
+        % Illustrative battery model
+        Current(k) = I;
+
+        SOC(k) = SOC(k-1) + ...
+            (I * dt / (capacity_Ah * 60)) * 100;
+
+        SOC(k) = min(SOC(k),100);
+
+        % Simplified temperature model
+        heat_gain = 0.025 * I^2;
+        cooling = 0.015 * (Temp(k-1) - ambient_temp);
+
+        Temp(k) = Temp(k-1) + ...
+            heat_gain - cooling;
+
+        % Record the time when target SOC is reached
+        if SOC(k) >= target_SOC && charge_time(strategy) == 0
+            charge_time(strategy) = time(k);
+        end
+
+    end
+
+    SOC_all(strategy,:) = SOC;
+    Current_all(strategy,:) = Current;
+    Temp_all(strategy,:) = Temp;
+
+end
+
+%% Plot Comparison
+figure('Name','KAIROS - Battery Charging Optimization', ...
+       'NumberTitle','off', ...
+       'Color','w');
+
+% Graph 1: Battery State of Charge
+subplot(3,1,1);
+
+plot(time,SOC_all(1,:),'LineWidth',1.5);
+hold on;
+plot(time,SOC_all(2,:),'LineWidth',1.5);
+plot(time,SOC_all(3,:),'LineWidth',1.5);
+
+yline(target_SOC,'--k','Target SOC');
+
+title('Battery State of Charge');
+xlabel('Time (minutes)');
+ylabel('SOC (%)');
+legend(strategies,'Location','best');
+grid on;
+ylim([0 100]);
+
+% Graph 2: Charging Current
+subplot(3,1,2);
+
+plot(time,Current_all(1,:),'LineWidth',1.5);
+hold on;
+plot(time,Current_all(2,:),'LineWidth',1.5);
+plot(time,Current_all(3,:),'LineWidth',1.5);
+
+title('Charging Current Comparison');
+xlabel('Time (minutes)');
+ylabel('Current (A)');
+legend(strategies,'Location','best');
+grid on;
+
+% Graph 3: Simulated Battery Temperature
+subplot(3,1,3);
+
+plot(time,Temp_all(1,:),'LineWidth',1.5);
+hold on;
+plot(time,Temp_all(2,:),'LineWidth',1.5);
+plot(time,Temp_all(3,:),'LineWidth',1.5);
+
+yline(max_temp,'--r','Illustrative Temperature Limit');
+
+title('Simulated Battery Temperature');
+xlabel('Time (minutes)');
+ylabel('Temperature (deg C)');
+legend(strategies,'Location','best');
+grid on;
+
+sgtitle('KAIROS: Battery Charging Profile Comparison');
+
+%% Display Results
+fprintf('\nKAIROS - Battery Charging Profile Optimization\n');
+fprintf('Illustrative simulation results only\n\n');
+
+for strategy = 1:3
+
+    fprintf('%s:\n',strategies{strategy});
+    fprintf('Final SOC: %.2f%%\n',SOC_all(strategy,end));
+    fprintf('Maximum temperature: %.2f deg C\n', ...
+        max(Temp_all(strategy,:)));
+
+    if charge_time(strategy) > 0
+        fprintf('Time to target SOC: %.0f minutes\n\n', ...
+            charge_time(strategy));
+    else
+        fprintf('Target SOC not reached within simulation.\n\n');
+    end
+
+end
